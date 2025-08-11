@@ -25,11 +25,12 @@
       depSpec.name == "${depSpec.component.name}-metadata-${depSpec.component.version}.jar";
   in
     if isUnpublishedMetadataJar
-    then builtins.trace "Ignoring potentially unpublished metadata jar: ${depSpec.name}" false
+    then false
     else true,
   repositories ? ["https://plugins.gradle.org/m2/" "https://repo1.maven.org/maven2/"],
   verificationFile ? "gradle/verification-metadata.xml",
   buildTask ? ":installDist",
+  checkTask ? ":check",
   installLocation ? "build/install/*/",
 }: let
   m2Repository = mkM2Repository {
@@ -90,6 +91,25 @@
       gradle --offline --no-daemon --no-watch-fs --no-configuration-cache --no-build-cache -Dorg.gradle.console=plain --no-scan -Porg.gradle.java.installations.auto-download=false --init-script ${./init.gradle.kts} ${buildTask}
 
       runHook postBuild
+    '';
+
+    checkPhase = ''
+      runHook preCheck
+
+      # Setup maven repo
+      export MAVEN_SOURCE_REPOSITORY=${m2Repository.m2Repository}
+      echo "Using maven repository at: $MAVEN_SOURCE_REPOSITORY"
+
+      # create temporary gradle home
+      export GRADLE_USER_HOME=$(mktemp -d)
+
+      # Export application version to the build
+      export APP_VERSION=${version}
+
+      # built the dam thing!
+      gradle --offline --no-daemon --no-watch-fs --no-configuration-cache --no-build-cache -Dorg.gradle.console=plain --no-scan -Porg.gradle.java.installations.auto-download=false --init-script ${./init.gradle.kts} ${checkTask}
+
+      runHook postCheck
     '';
 
     installPhase = ''
